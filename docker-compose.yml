@@ -1,0 +1,120 @@
+version: '3.8'
+
+services:
+  # DarkChat Application
+  darkchat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: darkchat-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://darkchat:darkchat_password@postgres:5432/darkchat
+      - REDIS_URL=redis://redis:6379
+      - SESSION_SECRET=your-super-secret-session-key-change-this-in-production
+      - RSA_KEY_SIZE=4096
+      - MESSAGE_TTL=300
+      - CORS_ORIGIN=http://localhost:3000
+      - LOG_LEVEL=error
+      - ENABLE_METRICS=false
+      - TRUST_PROXY=true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - darkchat_logs:/app/logs
+    networks:
+      - darkchat_network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: darkchat-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=darkchat
+      - POSTGRES_USER=darkchat
+      - POSTGRES_PASSWORD=darkchat_password
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - darkchat_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U darkchat -d darkchat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"  # Remove or comment out in production
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: darkchat-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+      - ./docker/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - darkchat_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    ports:
+      - "6379:6379"  # Remove or comment out in production
+
+  # Nginx Reverse Proxy (Optional - Recommended for Production)
+  nginx:
+    image: nginx:alpine
+    container_name: darkchat-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - darkchat
+    networks:
+      - darkchat_network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  darkchat_logs:
+    driver: local
+  nginx_logs:
+    driver: local
+
+networks:
+  darkchat_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
