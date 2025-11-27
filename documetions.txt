@@ -1,0 +1,748 @@
+# DarkChat Implementation Plan
+
+## Overview
+
+DarkChat is a secure, temporary, browser-based communication platform with end-to-end encryption, self-destructing messages, and zero-knowledge architecture. The system ensures complete privacy by storing only encrypted payloads temporarily and implementing automatic message deletion.
+
+## Technology Stack
+
+**Backend**: Express.js with Redis for temporary message storage and PostgreSQL for user/device metadata
+**Frontend**: EJS templates with vanilla JavaScript for client-side encryption
+**Real-time**: Socket.IO for WebSocket messaging
+**Cryptography**: Node.js crypto module for RSA and AES encryption
+**Session Management**: Express session with Redis store
+
+## Security Architecture
+
+- **End-to-End Encryption**: RSA-4096 for key exchange + AES-256 for message encryption
+- **Forward Secrecy**: New AES key per message
+- **Zero-Knowledge**: Server stores only encrypted payloads, never private keys
+- **Self-Destruct**: TTL-based expiration + one-time view capability
+- **No Persistence**: Messages exist only in Redis memory with automatic cleanup
+
+---
+
+## Project Structure Setup
+
+### Core Dependencies
+
+**Repository**: my-first-project
+
+**File**: package.json
+**Purpose**: Project dependencies and scripts
+**Implementation**:
+
+- Framework: express@4.x
+- Database: pg@8.x, redis@4.x, knex@3.x (migrations)
+- Real-time: socket.io@4.x
+- Templates: ejs@3.x
+- Sessions: express-session@1.x, connect-redis@7.x
+- Encryption: node-forge@1.x (RSA), crypto (AES)
+- Security: helmet@7.x, cors@2.x
+- Environment: dotenv@16.x
+
+**Dev dependencies**: nodemon@3.x for development
+
+---
+
+## Database Schema (PostgreSQL)
+
+### Migration Files
+
+**Directory**: src/migrations/
+
+**Migration 001**: Create users table
+
+- id: UUID PRIMARY KEY
+- username: VARCHAR(50) UNIQUE NOT NULL
+- created\_at: TIMESTAMP DEFAULT NOW()
+- last\_seen: TIMESTAMP
+- status: VARCHAR(20) DEFAULT 'offline'
+
+**Migration 002**: Create device\_sessions table
+
+- id: UUID PRIMARY KEY
+- user\_id: UUID REFERENCES users(id)
+- device\_fingerprint: VARCHAR(255) UNIQUE
+- public\_key: TEXT NOT NULL
+- created\_at: TIMESTAMP DEFAULT NOW()
+- last\_active: TIMESTAMP DEFAULT NOW()
+
+**Migration 003**: Create messages\_metadata table (metadata only, content in Redis)
+
+- id: UUID PRIMARY KEY
+- sender\_id: UUID REFERENCES users(id)
+- receiver\_id: UUID REFERENCES users(id)
+- message\_id: VARCHAR(255) UNIQUE (Redis key reference)
+- encrypted\_aes\_key: TEXT NOT NULL
+- expires\_at: TIMESTAMP NOT NULL
+- one\_time\_view: BOOLEAN DEFAULT FALSE
+- created\_at: TIMESTAMP DEFAULT NOW()
+- status: VARCHAR(20) DEFAULT 'delivered'
+
+---
+
+## MVC Architecture Structure
+
+### Models Layer
+
+**File**: src/models/User.js
+**Purpose**: User data management
+**Implementation**:
+
+- findByUsername(username) - Find user by username
+- create(username) - Create new user with UUID
+- updateLastSeen(userId) - Update user activity
+- getById(userId) - Get user by ID
+- getAllActive() - Get all active users for chat list
+
+**File**: src/models/DeviceSession.js
+**Purpose**: Device key management
+**Implementation**:
+
+- findByDeviceFingerprint(fingerprint) - Get device session
+- create(userId, fingerprint, publicKey) - Register new device
+- updateLastActive(sessionId) - Update device activity
+- getPublicKeyByUserId(userId) - Get user's public keys
+- deleteOldSessions(userId, maxAge) - Clean old device sessions
+
+**File**: src/models/Message.js
+**Purpose**: Message metadata tracking
+**Implementation**:
+
+- createMetadata(senderId, receiverId, messageId, encryptedAesKey, expiresAt, oneTimeView) - Store message metadata
+- updateStatus(messageId, status) - Update message delivery status
+- getExpiredMessages() - Get expired messages for cleanup
+- getByMessageId(messageId) - Get message metadata
+
+### Controllers Layer
+
+**File**: src/controllers/AuthController.js
+**Purpose**: User authentication and session management
+**Routes**:
+
+- POST /auth/login - Create session with username
+- POST /auth/logout - Destroy session
+- GET /auth/me - Get current user info
+- POST /auth/register-device - Store device public key
+
+**File**: src/controllers/MessageController.js
+**Purpose**: Message handling (encryption/decryption)
+**Routes**:
+
+- POST /api/messages/send - Store encrypted message
+- GET /api/messages/:messageId - Get encrypted message
+- DELETE /api/messages/:messageId - Mark message as read/destroyed
+- GET /api/messages/inbox - Get message list (metadata only)
+
+**File**: src/controllers/ChatController.js
+**Purpose**: View rendering
+**Routes**:
+
+- GET / - Login page
+- GET /chat-list - Contact list page
+- GET /chat/:username - Chat room page
+- GET /generate-keys - Key generation utility
+
+**File**: src/controllers/NotificationController.js
+**Purpose**: WebSocket event handling
+**Socket Events**:
+
+- 'connection' - New WebSocket connection
+- 'disconnect' - Connection cleanup
+- 'new-message' - Message delivery
+- 'message-read' - Read receipt
+- 'user-typing' - Typing indicator
+
+### Services Layer
+
+**File**: src/services/EncryptionService.js
+**Purpose**: Client-side cryptography operations
+**Implementation**:
+
+- generateRSAKeyPair() - Generate RSA-4096 key pair
+- generateAESKey() - Generate random AES-256 key
+- encryptWithAES(message, key) - AES-256-GCM encryption
+- decryptWithAES(ciphertext, key) - AES-256-GCM decryption
+- encryptWithRSA(data, publicKey) - RSA-OAEP encryption
+- decryptWithRSA(encryptedData, privateKey) - RSA-OAEP decryption
+- signMessage(message, privateKey) - RSA-PSS signature
+- verifySignature(message, signature, publicKey) - RSA-PSS verification
+
+**File**: src/services/MessageService.js
+**Purpose**: Message lifecycle management
+**Implementation**:
+
+- **Storage Strategy**: Hybrid approach for optimal performance
+- Individual messages: `message:{messageId}` (TTL-based cleanup)
+- User inbox tracking: `inbox:{userId}` (fast retrieval)
+- storeMessage(messageId, encryptedPayload, encryptedAESKey, TTL) - Store in Redis
+- getMessage(messageId) - Retrieve from Redis (auto-deletes if one-time view)
+- getInbox(userId) - Get user's message metadata list
+- markAsRead(messageId) - Delete message immediately
+- cleanupExpired() - Background cleanup of expired messages
+
+**File**: src/services/WebSocketService.js
+**Purpose**: Real-time communication
+**Implementation**:
+
+- manageUserConnections(userId, socketId) - Track active connections
+- sendMessageToUser(userId, messageData) - Direct message delivery
+- broadcastToAllUsers(event, data) - System-wide notifications
+- handleTypingIndicators(userId, receiverId) - Typing status
+- cleanupDisconnectedSockets() - Connection cleanup
+
+**File**: src/services/KeyExchangeService.js
+**Purpose**: Public key management
+**Implementation**:
+
+- registerDevicePublicKey(userId, deviceFingerprint, publicKey) - Store device key
+- getUserPublicKeys(username) - Get all active public keys for user
+- rotateKeys(userId, deviceFingerprint) - Key rotation mechanism
+- validateDeviceAccess(userId, deviceFingerprint) - Device authentication
+
+---
+
+## Security Implementation
+
+### End-to-End Encryption Flow
+
+**Message Sending Process**:
+
+1. **Client Side**:
+
+- Generate random AES-256 key for this message
+- Encrypt message content with AES key (AES-GCM mode)
+- Encrypt AES key with receiver's RSA public key
+- Sign message hash with sender's RSA private key
+- Send {cipherText, encryptedAESKey, signature} to server
+
+2. **Server Side**:
+
+- Store encrypted payload in Redis with TTL
+- Store metadata (sender, receiver, timestamps) in PostgreSQL
+- Notify receiver via WebSocket
+- Never see plaintext or private keys
+
+3. **Message Receiving Process**:
+
+- Client retrieves encrypted message from server
+- Decrypts AES key with private RSA key
+- Decrypts message with AES key
+- Verifies signature with sender's public key
+- Displays content only in browser memory
+
+### Redis Message Storage Schema
+
+**Individual Messages**:
+
+```
+Key: message:{messageId}
+Value: {
+  "cipherText": "base64_encrypted_content",
+  "signature": "base64_signature",
+  "iv": "base64_initialization_vector",
+  "authTag": "base64_authentication_tag"
+}
+TTL: expiresAt timestamp
+```
+
+**User Inbox Index**:
+
+```
+Key: inbox:{userId}
+Value: Sorted Set with message metadata
+Score: expiresAt timestamp (for auto-sorting)
+Member: JSON string with {messageId, sender, createdAt, oneTimeView}
+TTL: 7 days (inbox cleanup)
+```
+
+**Active User Sessions**:
+
+```
+Key: sessions:{userId}
+Value: Set of connected socket IDs
+TTL: 24 hours (session cleanup)
+```
+
+### Authentication & Session Security
+
+**Anonymous User Authentication**:
+
+- Username only (no email/password required)
+- Session stored in Redis with random session ID
+- Each browser device generates unique RSA key pair
+- Device fingerprint stored for multi-device support
+- Automatic logout after 24 hours inactivity
+
+**Device Security**:
+
+- Private RSA keys never leave browser memory
+- Keys regenerated on browser refresh/reload
+- Optional: Encrypted local storage for key persistence
+- Device-specific public keys registered with server
+
+---
+
+## Views Layer (EJS Templates)
+
+### Frontend Architecture
+
+**File**: src/views/login.ejs
+**Purpose**: User login/registration
+**Components**:
+
+- Username input field (2-50 chars, alphanumeric + underscore)
+- "Generate Secure Session" button
+- Key generation progress indicator
+- Terms and privacy notice
+
+**File**: src/views/chatList.ejs
+**Purpose**: Contact selection interface
+**Components**:
+
+- Active users list (sorted by last seen)
+- User status indicators (online/offline/away)
+- Search/filter functionality
+- No message previews (privacy-first)
+- "New Chat" action button
+
+**File**: src/views/chatRoom.ejs
+**Purpose**: Live chat interface
+**Components**:
+
+- Message display area (auto-scroll)
+- Message composer with character counter
+- Send button with loading state
+- One-time view indicator
+- Message expiration countdown timers
+- Typing indicators
+- Security status display
+
+**File**: src/views/error.ejs
+**Purpose**: Error handling
+**Components**:
+
+- Error type categorization
+- Retry/refresh options
+- Privacy-friendly error messages
+
+### Client-Side JavaScript
+
+**File**: src/public/js/encryption.js
+**Purpose**: Browser-based encryption operations
+**Functions**:
+
+- generateKeyPair() - RSA-4096 key generation
+- encryptMessage(content, recipientPublicKey) - Message encryption
+- decryptMessage(encryptedData) - Message decryption
+- signMessage(content) - Message signing
+- verifySignature(message, signature, publicKey) - Signature verification
+
+**File**: src/public/js/chat.js
+**Purpose**: Chat interface functionality
+**Functions**:
+
+- sendMessage() - Handle message sending with encryption
+- receiveMessage() - Handle incoming messages with decryption
+- handleOneTimeView() - Auto-delete one-time messages
+- updateExpirationTimers() - Manage message TTL displays
+- handleTypingIndicator() - Typing status management
+
+**File**: src/public/js/websocket.js
+**Purpose**: Real-time communication
+**Functions**:
+
+- connectWebSocket() - Establish secure connection
+- handleNewMessage() - Process incoming messages
+- handleUserStatus() - Update online/offline status
+- handleTypingEvents() - Typing indicator events
+- handleDisconnection() - Clean disconnect handling
+
+---
+
+## Middleware & Routes Configuration
+
+### Security Middleware
+
+**File**: src/middleware/security.js
+**Purpose**: Security hardening
+**Implementation**:
+
+- helmet.js for security headers
+- CORS configuration for WebSocket origins
+- Rate limiting per IP and per user
+- Request validation and sanitization
+
+**File**: src/middleware/auth.js
+**Purpose**: Authentication middleware
+**Implementation**:
+
+- Session validation using Redis
+- Device fingerprint verification
+- Public key registration check
+- Auto-cleanup expired sessions
+
+**File**: src/middleware/validation.js
+**Purpose**: Input validation
+**Implementation**:
+
+- Username validation (2-50 chars, alphanumeric + underscore)
+- Message content limits (max 10,000 chars)
+- Public key format validation
+- Request body schema validation
+
+### Route Definitions
+
+**File**: src/routes/auth.js
+**Routes**:
+
+- POST /auth/login - Create anonymous session
+- POST /auth/logout - Destroy session
+- GET /auth/me - Get current user info
+- POST /auth/register-device - Store device public key
+
+**File**: src/routes/api.js
+**Routes**:
+
+- POST /api/messages/send - Send encrypted message
+- GET /api/messages/:messageId - Get encrypted message
+- DELETE /api/messages/:messageId - Mark as read/destroyed
+- GET /api/users/active - Get active users list
+- GET /api/users/:username/public-keys - Get user's public keys
+
+**File**: src/routes/web.js
+**Routes**:
+
+- GET / - Login page (redirect if authenticated)
+- GET /chat-list - Contact selection
+- GET /chat/:username - Chat room interface
+- GET /privacy - Privacy policy page
+
+---
+
+## Advanced Features Implementation
+
+### Message Anonymity Options
+
+**User-Choice Anonymity System**:
+
+- **Default Mode**: Show sender username
+- **Anonymous Mode**: Messages show as "Anonymous Sender"
+- **Sender's Choice**: Each message has anonymity toggle
+- **Receiver Preference**: Can request anonymous-only conversations
+
+**UI Implementation**:
+
+- Checkbox in message composer: "Send as Anonymous"
+- Conversation settings: "Prefer anonymous messages"
+- Visual indicators: 🔒 icon for anonymous messages
+- Message metadata preserves sender ID for system use
+
+### Multi-Device Support
+
+**Device Management**:
+
+- Each browser/device generates unique RSA key pair
+- Device fingerprinting for session identification
+- Cross-device key exchange for message synchronization
+- Device revocation and cleanup mechanisms
+
+**Message Synchronization**:
+
+- Messages encrypted separately for each recipient device
+- Device-specific message copies in Redis
+- Unified inbox view across devices
+- Secure message delivery to all active devices
+
+### Self-Destruct Message Enhancements
+
+**Expiration Options**:
+
+- **One-Time View**: Delete immediately after reading
+- **Timed Deletion**: 1 minute, 5 minutes, 1 hour, 24 hours
+- **View-Once with Screenshots**: Warn but not prevent screenshots
+- **Burn After Reading**: Visual countdown timers
+
+**Visual Feedback**:
+
+- Progress bars showing message remaining time
+- Color-coded urgency (red for < 1 minute)
+- Auto-scroll to expiring messages
+- "Message will self-destruct in..." warnings
+
+### Advanced Security Features
+
+**Perfect Forward Secrecy**:
+
+- New AES key generated per message
+- No key reuse across messages
+- Session key rotation every 24 hours
+- Historical message decryption impossible after key rotation
+
+**Message Authentication**:
+
+- RSA-PSS digital signatures on all messages
+- Replay attack prevention with timestamps
+- Man-in-the-middle attack protection
+- Key validation and certificate pinning
+
+**Denial of Service Protection**:
+
+- Per-user message rate limiting (10 messages/minute)
+- Concurrent connection limits per user
+- Redis memory usage monitoring
+- Automatic cleanup of orphaned messages
+
+---
+
+## Configuration & Deployment
+
+### Environment Configuration
+
+**File**: src/config/database.js
+**Purpose**: Database connection setup
+**Configuration**:
+
+- PostgreSQL connection pooling
+- Redis connection with retry logic
+- Connection timeout settings
+- Graceful shutdown handling
+
+**File**: src/config/app.js
+**Purpose**: Application configuration
+**Settings**:
+
+- Server port and host configuration
+- Session security settings
+- CORS and security headers
+- WebSocket CORS configuration
+
+**File**: src/config/encryption.js
+**Purpose**: Cryptography configuration
+**Parameters**:
+
+- RSA key size (4096 bits default)
+- AES key size (256 bits)
+- Hash algorithm (SHA-256)
+- Signature algorithm (RSA-PSS)
+
+### Docker Deployment
+
+**File**: Dockerfile
+**Purpose**: Containerized deployment
+**Configuration**:
+
+- Node.js 18+ base image
+- Multi-stage build for optimization
+- Security hardening (non-root user)
+- Health checks for monitoring
+
+**File**: docker-compose.yml
+**Purpose**: Development environment
+**Services**:
+
+- DarkChat application
+- PostgreSQL database
+- Redis cache
+- Nginx reverse proxy
+
+### Production Considerations
+
+**Security Hardening**:
+
+- HTTPS enforcement with HSTS
+- Content Security Policy headers
+- XSS and CSRF protection
+- Rate limiting and DDoS protection
+
+**Performance Optimization**:
+
+- Redis memory management
+- Database query optimization
+- WebSocket connection pooling
+- Static asset compression
+
+**Monitoring & Logging**:
+
+- Structured logging without sensitive data
+- Redis memory usage alerts
+- WebSocket connection metrics
+- Error rate monitoring
+
+**Backup & Recovery**:
+
+- PostgreSQL user metadata backup
+- Redis persistence configuration
+- No message content backup (privacy requirement)
+- Disaster recovery procedures
+
+---
+
+## Testing & Quality Assurance
+
+### Security Testing
+
+**Penetration Testing Checklist**:
+
+- Man-in-the-middle attack resistance
+- Private key exposure verification
+- Message replay attack prevention
+- Session hijacking protection
+- Cross-site scripting (XSS) prevention
+
+**Cryptographic Validation**:
+
+- RSA key generation randomness
+- AES key uniqueness per message
+- Signature verification integrity
+- Forward secrecy verification
+
+### Performance Testing
+
+**Load Testing Scenarios**:
+
+- 1000 concurrent users
+- 10,000 messages per minute
+- Memory usage under heavy load
+- Redis TTL cleanup performance
+
+**Stress Testing**:
+
+- WebSocket connection limits
+- Database connection pooling
+- Memory leak detection
+- Graceful degradation testing
+
+### User Experience Testing
+
+**Usability Testing**:
+
+- Key generation performance
+- Message encryption/decryption speed
+- WebSocket connection reliability
+- Mobile device compatibility
+
+**Privacy Verification**:
+
+- No message persistence after TTL
+- Private key storage verification
+- Browser memory cleanup testing
+- Cross-device isolation validation
+
+---
+
+## API Documentation
+
+### Authentication Endpoints
+
+**POST /auth/login**
+
+```json
+Request: {"username": "user123"}
+Response: {"userId": "uuid", "sessionId": "token", "expiresIn": 86400}
+```
+
+**POST /auth/register-device**
+
+```json
+Request: {"publicKey": "base64_rsa_public_key"}
+Response: {"deviceId": "uuid", "registered": true}
+```
+
+### Messaging Endpoints
+
+**POST /api/messages/send**
+
+```json
+Request: {
+  "recipient": "user456",
+  "cipherText": "base64_encrypted_message",
+  "encryptedAESKey": "base64_encrypted_aes_key",
+  "signature": "base64_signature",
+  "expiresIn": 300,
+  "oneTimeView": false,
+  "anonymous": false
+}
+Response: {"messageId": "uuid", "status": "sent"}
+```
+
+**GET /api/messages/:messageId**
+
+```json
+Response: {
+  "cipherText": "base64_encrypted_message",
+  "signature": "base64_signature",
+  "iv": "base64_initialization_vector",
+  "authTag": "base64_authentication_tag",
+  "expiresAt": "timestamp"
+}
+```
+
+### WebSocket Events
+
+**Message Delivery**
+
+```json
+Event: "new-message"
+Data: {
+  "messageId": "uuid",
+  "sender": "user123",
+  "anonymous": false,
+  "oneTimeView": false,
+  "expiresIn": 300
+}
+```
+
+**User Status**
+
+```json
+Event: "user-status"
+Data: {"userId": "uuid", "status": "online", "lastSeen": "timestamp"}
+```
+
+---
+
+## Final Security Guarantees
+
+### Zero-Knowledge Proof
+
+- Server cannot decrypt any message content
+- Server cannot access private RSA keys
+- Server cannot recover deleted messages
+- Server cannot link anonymous messages to users
+
+### Privacy Guarantees
+
+- No message history stored permanently
+- No user IP logging or tracking
+- No metadata correlation across messages
+- Automatic message self-destruction
+
+### Forward Secrecy
+
+- Compromise of long-term keys doesn't compromise past messages
+- New keys generated for each message
+- Key rotation prevents historical decryption
+- Session compromise affects only current session
+
+This implementation provides a complete, production-ready secure messaging platform that prioritizes user privacy while maintaining usability and performance.
+├── views/           # EJS templates
+├── public/          # Static assets
+├── routes/          # Route definitions
+├── utils/           # Helper functions
+└── config/          # Configuration files
+
+```
+### Environment Configuration
+**File**: .env
+**Purpose**: Environment variables
+**Variables**:
+- PORT=3000
+- DATABASE_URL=postgresql://localhost/darkchat
+- REDIS_URL=redis://localhost:6379
+- SESSION_SECRET=complex-random-string
+- RSA_KEY_SIZE=4096
+- MESSAGE_TTL=300 (seconds)
+- CORS_ORIGIN=http://localhost:3000
+```
