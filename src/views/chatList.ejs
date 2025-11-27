@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/chatList.css">
+    <link rel="icon" href="/static/images/favicon.ico" type="image/x-icon">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <h1>🔒 DarkChat</h1>
+                </div>
+                <div class="user-menu">
+                    <div class="user-info">
+                        <span class="username"><%= user.username %></span>
+                        <span class="status-indicator status-<%= user.status %>"></span>
+                    </div>
+                    <div class="user-actions">
+                        <a href="/settings" class="btn btn-secondary" title="Settings">
+                            ⚙️
+                        </a>
+                        <form action="/auth/logout" method="POST" class="logout-form">
+                            <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                            <button type="submit" class="btn btn-danger" title="Logout">
+                                🚪
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="sidebar">
+                <!-- Key Registration Alert -->
+                <% if (requiresKeyRegistration) { %>
+                    <div class="alert alert-warning key-alert">
+                        <div class="alert-content">
+                            <h4>🔐 Encryption Keys Required</h4>
+                            <p>You need to generate encryption keys to start chatting securely.</p>
+                            <a href="/generate-keys" class="btn btn-primary">
+                                Generate Keys Now
+                            </a>
+                        </div>
+                        <button class="alert-close" onclick="this.parentElement.style.display='none'">×</button>
+                    </div>
+                <% } %>
+
+                <!-- Search Users -->
+                <div class="search-section">
+                    <div class="search-container">
+                        <input
+                            type="text"
+                            id="userSearch"
+                            placeholder="Search users..."
+                            autocomplete="off"
+                        >
+                        <button class="search-btn" id="searchBtn">
+                            🔍
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Active Users List -->
+                <div class="users-section">
+                    <div class="section-header">
+                        <h2>Active Users</h2>
+                        <span class="user-count" id="userCount"><%= users.length %></span>
+                    </div>
+                    <div class="users-list" id="usersList">
+                        <% users.forEach(function(user) { %>
+                            <div class="user-item" data-username="<%= user.username %>" data-user-id="<%= user.id %>">
+                                <div class="user-avatar">
+                                    <div class="avatar-placeholder">
+                                        <%= user.username.charAt(0).toUpperCase() %>
+                                    </div>
+                                    <span class="status-dot status-<%= user.statusClass %>"></span>
+                                </div>
+                                <div class="user-details">
+                                    <div class="user-name"><%= user.username %></div>
+                                    <div class="user-status"><%= user.status %></div>
+                                    <div class="last-seen"><%= user.lastSeenText %></div>
+                                </div>
+                                <div class="user-actions">
+                                    <a href="/chat/<%= user.username %>" class="btn btn-chat">
+                                        💬
+                                    </a>
+                                </div>
+                            </div>
+                        <% }); %>
+
+                        <% if (users.length === 0) { %>
+                            <div class="empty-state">
+                                <div class="empty-icon">🔍</div>
+                                <h3>No Active Users</h3>
+                                <p>Be the first to start a conversation!</p>
+                            </div>
+                        <% } %>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Preview Area -->
+            <div class="chat-preview">
+                <div class="welcome-section">
+                    <div class="welcome-content">
+                        <h2>Welcome to DarkChat</h2>
+                        <p>Select a user to start a secure conversation.</p>
+
+                        <div class="security-features">
+                            <h3>🔐 Security Features Active</h3>
+                            <div class="feature-grid">
+                                <div class="feature-item">
+                                    <span class="feature-icon">🔒</span>
+                                    <span class="feature-text">End-to-End Encryption</span>
+                                </div>
+                                <div class="feature-item">
+                                    <span class="feature-icon">🗑️</span>
+                                    <span class="feature-text">Self-Destructing Messages</span>
+                                </div>
+                                <div class="feature-item">
+                                    <span class="feature-icon">👁️</span>
+                                    <span class="feature-text">One-Time View Option</span>
+                                </div>
+                                <div class="feature-item">
+                                    <span class="feature-icon">🌐</span>
+                                    <span class="feature-text">No Message History</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="quick-stats">
+                            <div class="stat-item">
+                                <span class="stat-value"><%= users.length %></span>
+                                <span class="stat-label">Active Users</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-value" id="messageCount">0</span>
+                                <span class="stat-label">Messages Sent</span>
+                            </div>
+                        </div>
+
+                        <div class="actions">
+                            <% if (requiresKeyRegistration) { %>
+                                <a href="/generate-keys" class="btn btn-primary btn-large">
+                                    🔐 Generate Encryption Keys
+                                </a>
+                            <% } else { %>
+                                <a href="/settings" class="btn btn-secondary">
+                                    ⚙️ Manage Devices
+                                </a>
+                            <% } %>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-left">
+                <span class="connection-status" id="connectionStatus">
+                    <span class="status-dot status-online"></span>
+                    Connected
+                </span>
+            </div>
+            <div class="status-center">
+                <span id="serverTime"></span>
+            </div>
+            <div class="status-right">
+                <a href="/privacy" class="status-link">Privacy</a>
+                <a href="/about" class="status-link">About</a>
+                <% if (isDevelopment) { %>
+                    <a href="/dev/tools" class="status-link">Dev</a>
+                <% } %>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Search Results Modal -->
+    <div class="modal" id="searchModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Search Results</h3>
+                <button class="modal-close" id="closeSearchModal">×</button>
+            </div>
+            <div class="modal-body">
+                <div id="searchResults"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Modal -->
+    <div class="modal" id="errorModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Error</h3>
+                <button class="modal-close" id="closeErrorModal">×</button>
+            </div>
+            <div class="modal-body">
+                <p id="errorMessage"></p>
+                <button class="btn btn-primary" id="closeErrorBtn">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="/static/js/crypto/polyfills.js"></script>
+    <script src="/static/js/websocket.js"></script>
+    <script src="/static/js/chatList.js"></script>
+
+    <!-- Configuration and Security -->
+    <script>
+        window.DARKCHAT_CONFIG = {
+            user: {
+                id: '<%= user.id %>',
+                username: '<%= user.username %>',
+                status: '<%= user.status %>',
+                hasDeviceKeys: <%= user.hasDeviceKeys %>
+            },
+            websocket: {
+                url: window.location.protocol === 'https:' ? 'wss://' : 'ws://' + window.location.host,
+                reconnect: true,
+                reconnectDelay: 5000
+            },
+            security: {
+                csrfToken: '<%= csrfToken %>'
+            },
+            ui: {
+                searchDelay: 300,
+                statusUpdateInterval: 30000
+            },
+            development: <%= isDevelopment %>
+        };
+
+        // Initialize application
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DarkChat Chat List initializing...');
+
+            // Initialize WebSocket connection
+            if (window.DarkChat) {
+                window.DarkChat.init();
+            }
+        });
+
+        // Security measures
+        window.addEventListener('beforeunload', function() {
+            // Clean up sensitive data
+            if (window.DarkChat && window.DarkChat.cleanup) {
+                window.DarkChat.cleanup();
+            }
+        });
+    </script>
+</body>
+</html>

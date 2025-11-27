@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <meta name="description" content="DarkChat - An error occurred">
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/error.css">
+    <link rel="icon" href="/static/images/favicon.ico" type="image/x-icon">
+</head>
+<body>
+    <div class="error-container">
+        <div class="error-content">
+            <div class="error-icon">
+                <%= title.includes('404') ? '🔍' : title.includes('401') || title.includes('403') ? '🔒' : '⚠️' %>
+            </div>
+
+            <h1 class="error-title"><%= title %></h1>
+
+            <p class="error-message"><%= message %></p>
+
+            <% if (error && isDevelopment) { %>
+                <div class="error-details">
+                    <h3>Error Details (Development Mode)</h3>
+                    <pre class="error-stack"><%= error %></pre>
+                </div>
+            <% } %>
+
+            <div class="error-actions">
+                <% if (showHome) { %>
+                    <a href="/chat-list" class="btn btn-primary">
+                        🏠 Go to Chat List
+                    </a>
+                <% } %>
+
+                <a href="/login" class="btn btn-secondary">
+                    🔄 Login Again
+                </a>
+
+                <% if (isDevelopment) { %>
+                    <a href="/dev/tools" class="btn btn-secondary">
+                        🛠️ Dev Tools
+                    </a>
+                <% } %>
+            </div>
+
+            <div class="error-help">
+                <h3>Need Help?</h3>
+                <ul>
+                    <li>Check your internet connection</li>
+                    <li>Try refreshing the page</li>
+                    <li>Clear your browser cache</li>
+                    <li>Ensure your encryption keys are properly registered</li>
+                </ul>
+
+                <div class="help-links">
+                    <a href="/privacy">Privacy Policy</a>
+                    <a href="/about">About DarkChat</a>
+                    <% if (isDevelopment) { %>
+                        <a href="/health">System Health</a>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+
+        <div class="error-illustration">
+            <div class="lock-animation">
+                <div class="lock-body">🔒</div>
+                <div class="lock-shackle"></div>
+                <div class="error-particles">
+                    <span class="particle">!</span>
+                    <span class="particle">?</span>
+                    <span class="particle">⚠</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="error-footer">
+        <div class="footer-content">
+            <p>&copy; 2024 DarkChat. Secure, private messaging.</p>
+            <div class="footer-links">
+                <a href="/privacy">Privacy</a>
+                <a href="/about">About</a>
+                <a href="#" onclick="window.history.back(); return false;">Go Back</a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Error Reporting (Development Mode) -->
+    <% if (isDevelopment && error) { %>
+    <script>
+        // Log error details in development
+        console.error('DarkChat Error Details:', {
+            title: '<%= title %>',
+            message: '<%= message %>',
+            error: '<%= error %>',
+            url: window.location.href,
+            userAgent: navigator.userAgent,
+            timestamp: new Date().toISOString()
+        });
+
+        // Show error report button
+        document.addEventListener('DOMContentLoaded', function() {
+            const errorActions = document.querySelector('.error-actions');
+            const reportButton = document.createElement('button');
+            reportButton.className = 'btn btn-secondary';
+            reportButton.textContent = '📋 Copy Error Details';
+            reportButton.onclick = function() {
+                const errorDetails = {
+                    title: '<%= title %>',
+                    message: '<%= message %>',
+                    error: '<%= error %>',
+                    url: window.location.href,
+                    userAgent: navigator.userAgent,
+                    timestamp: new Date().toISOString()
+                };
+
+                navigator.clipboard.writeText(JSON.stringify(errorDetails, null, 2))
+                    .then(() => {
+                        alert('Error details copied to clipboard');
+                    })
+                    .catch(() => {
+                        alert('Failed to copy error details');
+                    });
+            };
+            errorActions.appendChild(reportButton);
+        });
+    </script>
+    <% } %>
+
+    <!-- Auto-redirect for session errors -->
+    <script>
+        // Auto-redirect to login for authentication errors
+        <% if (title.includes('401') || title.includes('Authentication')) { %>
+        setTimeout(function() {
+            window.location.href = '/login?error=' + encodeURIComponent('Your session has expired. Please log in again.');
+        }, 5000);
+        <% } %>
+
+        // Prevent form resubmission
+        if (window.history.replaceState) {
+            window.history.replaceState(null, null, window.location.href);
+        }
+
+        // Add interactive error particles
+        document.addEventListener('DOMContentLoaded', function() {
+            const particles = document.querySelectorAll('.particle');
+            particles.forEach((particle, index) => {
+                particle.style.animationDelay = `${index * 0.2}s`;
+            });
+        });
+
+        // Add keyboard navigation
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                window.history.back();
+            }
+        });
+    </script>
+
+    <!-- Security Headers -->
+    <script>
+        // Prevent caching of error pages
+        if (!window.location.search.includes('nocache=1')) {
+            const url = new URL(window.location);
+            url.searchParams.set('nocache', '1');
+            window.location.replace(url.toString());
+        }
+    </script>
+</body>
+</html>

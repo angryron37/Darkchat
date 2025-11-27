@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <meta name="description" content="<%= description %>">
+    <link rel="stylesheet" href="/static/css/login.css">
+    <link rel="icon" href="/static/images/favicon.ico" type="image/x-icon">
+</head>
+<body>
+    <div class="container">
+        <div class="login-container">
+            <div class="logo-section">
+                <h1>🔒 DarkChat</h1>
+                <p class="tagline">Secure • Anonymous • Self-Destructing</p>
+            </div>
+
+            <div class="login-form">
+                <% if (error) { %>
+                    <div class="alert alert-error">
+                        <span class="alert-icon">⚠️</span>
+                        <span class="alert-message"><%= error %></span>
+                    </div>
+                <% } %>
+
+                <% if (success) { %>
+                    <div class="alert alert-success">
+                        <span class="alert-icon">✅</span>
+                        <span class="alert-message"><%= success %></span>
+                    </div>
+                <% } %>
+
+                <form id="loginForm" action="/auth/login" method="POST">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input
+                            type="text"
+                            id="username"
+                            name="username"
+                            required
+                            pattern="[a-zA-Z0-9_]{2,50}"
+                            title="2-50 characters: letters, numbers, underscores"
+                            autocomplete="username"
+                            placeholder="Choose a username"
+                        >
+                        <small class="form-hint">
+                            Anonymous login - no email or password required
+                        </small>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="security-info">
+                            <h3>🔐 Security Features</h3>
+                            <ul>
+                                <li>End-to-end encryption (RSA-4096 + AES-256)</li>
+                                <li>Messages self-destruct after reading/timer</li>
+                                <li>No chat history stored on servers</li>
+                                <li>Anonymous messaging option</li>
+                                <li>Zero-knowledge architecture</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" id="loginBtn">
+                        <span class="btn-text">Start Secure Chat</span>
+                        <span class="btn-loading" style="display: none;">Generating keys...</span>
+                    </button>
+
+                    <div class="loading-section" id="loadingSection" style="display: none;">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill"></div>
+                        </div>
+                        <p class="loading-text">Generating secure encryption keys...</p>
+                        <p class="loading-subtext">This may take a few seconds</p>
+                    </div>
+                </form>
+
+                <div class="privacy-links">
+                    <a href="/privacy">Privacy Policy</a>
+                    <a href="/about">About DarkChat</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="security-badges">
+            <div class="badge">
+                <span class="badge-icon">🔒</span>
+                <span class="badge-text">End-to-End Encrypted</span>
+            </div>
+            <div class="badge">
+                <span class="badge-icon">🗑️</span>
+                <span class="badge-text">Self-Destructing</span>
+            </div>
+            <div class="badge">
+                <span class="badge-icon">👁️</span>
+                <span class="badge-text">One-Time View</span>
+            </div>
+            <div class="badge">
+                <span class="badge-icon">🌐</span>
+                <span class="badge-text">No History</span>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="footer-content">
+            <p>&copy; 2024 DarkChat. Private, secure messaging.</p>
+            <div class="footer-links">
+                <a href="/privacy">Privacy</a>
+                <a href="/about">About</a>
+                <% if (isDevelopment) { %>
+                    <a href="/dev/tools">Dev Tools</a>
+                <% } %>
+            </div>
+        </div>
+    </footer>
+
+    <!-- JavaScript -->
+    <script src="/static/js/crypto/polyfills.js"></script>
+    <script src="/static/js/crypto/rsa.js"></script>
+    <script src="/static/js/crypto/aes.js"></script>
+    <script src="/static/js/login.js"></script>
+
+    <!-- Security headers and scripts -->
+    <script>
+        // Prevent form resubmission
+        if (window.history.replaceState) {
+            window.history.replaceState(null, null, window.location.href);
+        }
+
+        // Clear sensitive data on page unload
+        window.addEventListener('beforeunload', function() {
+            // Clear any stored keys
+            if (window.sessionStorage) {
+                window.sessionStorage.clear();
+            }
+        });
+
+        // CSP violation reporting (if supported)
+        document.addEventListener('securitypolicyviolation', function(e) {
+            console.error('CSP Violation:', e);
+        });
+
+        // Initialize security features
+        document.addEventListener('DOMContentLoaded', function() {
+            // Generate secure random numbers if available
+            if (window.crypto && window.crypto.getRandomValues) {
+                console.log('Secure random number generation available');
+            } else {
+                console.warn('Secure random number generation not available');
+            }
+        });
+    </script>
+
+    <% if (isDevelopment) { %>
+    <!-- Development tools -->
+    <script>
+        window.DARKCHAT_CONFIG = {
+            development: true,
+            debugMode: true
+        };
+    </script>
+    <% } %>
+</body>
+</html>

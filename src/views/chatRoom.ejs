@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/chatRoom.css">
+    <link rel="icon" href="/static/images/favicon.ico" type="image/x-icon">
+</head>
+<body>
+    <div class="chat-container">
+        <!-- Chat Header -->
+        <header class="chat-header">
+            <div class="chat-info">
+                <div class="back-button">
+                    <a href="/chat-list" class="btn btn-back">← Back</a>
+                </div>
+                <div class="participant-info">
+                    <div class="participant-avatar">
+                        <div class="avatar-placeholder">
+                            <%= partnerUser.username.charAt(0).toUpperCase() %>
+                        </div>
+                        <span class="status-dot status-<%= partnerUser.statusClass %>"></span>
+                    </div>
+                    <div class="participant-details">
+                        <h2 class="participant-name"><%= partnerUser.username %></h2>
+                        <div class="participant-status">
+                            <span class="status-text"><%= partnerUser.status %></span>
+                            <span class="encryption-status" id="encryptionStatus">
+                                🔒 Encrypted
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="chat-actions">
+                <button class="btn btn-secondary" id="encryptionInfoBtn" title="Encryption Info">
+                    🔐
+                </button>
+                <button class="btn btn-secondary" id="chatSettingsBtn" title="Chat Settings">
+                    ⚙️
+                </button>
+            </div>
+        </header>
+
+        <!-- Messages Container -->
+        <div class="messages-container" id="messagesContainer">
+            <div class="messages-list" id="messagesList">
+                <!-- Messages will be loaded here -->
+                <div class="empty-state">
+                    <div class="empty-icon">🔒</div>
+                    <h3>Secure Chat Started</h3>
+                    <p>Messages are end-to-end encrypted and self-destructing.</p>
+                    <div class="encryption-summary">
+                        <div class="encryption-item">
+                            <span class="encryption-icon">🔐</span>
+                            <span>AES-256 Encryption</span>
+                        </div>
+                        <div class="encryption-item">
+                            <span class="encryption-icon">🔑</span>
+                            <span>RSA-4096 Key Exchange</span>
+                        </div>
+                        <div class="encryption-item">
+                            <span class="encryption-icon">🗑️</span>
+                            <span>Self-Destruct Enabled</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Message Composer -->
+        <div class="message-composer">
+            <!-- Typing Indicator -->
+            <div class="typing-indicator" id="typingIndicator" style="display: none;">
+                <span class="typing-text"><%= partnerUser.username %> is typing</span>
+                <div class="typing-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+
+            <!-- Message Form -->
+            <form id="messageForm" class="message-form">
+                <div class="message-options">
+                    <div class="option-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="anonymousMessage" name="anonymous">
+                            <span class="checkbox-text">
+                                <span class="checkbox-icon">👤</span>
+                                Send as Anonymous
+                            </span>
+                        </label>
+                    </div>
+                    <div class="option-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="oneTimeView" name="oneTimeView">
+                            <span class="checkbox-text">
+                                <span class="checkbox-icon">👁️</span>
+                                One-Time View
+                            </span>
+                        </label>
+                    </div>
+                    <div class="option-group">
+                        <label for="messageExpiration" class="select-label">
+                            <span class="select-icon">⏰</span>
+                            <select id="messageExpiration" name="expiration" class="expiration-select">
+                                <option value="60">1 min</option>
+                                <option value="300" selected>5 min</option>
+                                <option value="900">15 min</option>
+                                <option value="3600">1 hour</option>
+                                <option value="86400">24 hours</option>
+                            </select>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="message-input-container">
+                    <textarea
+                        id="messageInput"
+                        name="message"
+                        class="message-input"
+                        placeholder="Type a secure message..."
+                        rows="1"
+                        maxlength="10000"
+                        required
+                    ></textarea>
+                    <div class="input-actions">
+                        <div class="character-count">
+                            <span id="charCount">0</span>/10000
+                        </div>
+                        <button type="submit" class="btn btn-primary send-btn" id="sendBtn">
+                            <span class="send-text">Send</span>
+                            <span class="send-icon">🔒</span>
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Security Warning -->
+            <div class="security-warning">
+                <span class="warning-icon">⚠️</span>
+                <span class="warning-text">
+                    Messages are encrypted and self-destruct. Once sent, they cannot be recovered.
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Encryption Info Modal -->
+    <div class="modal" id="encryptionModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🔐 Encryption Information</h3>
+                <button class="modal-close" id="closeEncryptionModal">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="encryption-details">
+                    <h4>Security Settings</h4>
+                    <div class="security-item">
+                        <span class="security-label">Algorithm:</span>
+                        <span class="security-value">RSA-4096 + AES-256-GCM</span>
+                    </div>
+                    <div class="security-item">
+                        <span class="security-label">Key Exchange:</span>
+                        <span class="security-value">RSA-OAEP with SHA-256</span>
+                    </div>
+                    <div class="security-item">
+                        <span class="security-label">Message Encryption:</span>
+                        <span class="security-value">AES-256-GCM with random IV</span>
+                    </div>
+                    <div class="security-item">
+                        <span class="security-label">Digital Signatures:</span>
+                        <span class="security-value">RSA-PSS with SHA-256</span>
+                    </div>
+                </div>
+
+                <div class="partner-keys">
+                    <h4><%= partnerUser.username %>'s Public Keys</h4>
+                    <% partnerUser.publicKeys.forEach(function(key, index) { %>
+                        <div class="key-item">
+                            <div class="key-info">
+                                <span class="key-index">Key <%= index + 1 %></span>
+                                <span class="key-fingerprint"><%= key.fingerprint %></span>
+                            </div>
+                            <div class="key-date">
+                                Added: <%= new Date(key.createdAt).toLocaleDateString() %>
+                            </div>
+                        </div>
+                    <% }); %>
+                </div>
+
+                <div class="security-notice">
+                    <p>
+                        <strong>🔒 Your messages are:</strong>
+                    </p>
+                    <ul>
+                        <li>End-to-end encrypted - only you and the recipient can read them</li>
+                        <li>Signed with your private key for authenticity</li>
+                        <li>Stored temporarily and automatically deleted</li>
+                        <li>Never accessible to server administrators</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat Settings Modal -->
+    <div class="modal" id="chatSettingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>⚙️ Chat Settings</h3>
+                <button class="modal-close" id="closeChatSettingsModal">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-group">
+                    <h4>Message Defaults</h4>
+                    <label class="setting-label">
+                        <input type="checkbox" id="defaultAnonymous">
+                        <span>Send as Anonymous by default</span>
+                    </label>
+                    <label class="setting-label">
+                        <input type="checkbox" id="defaultOneTime">
+                        <span>One-time view by default</span>
+                    </label>
+                    <div class="setting-control">
+                        <label for="defaultExpiration">Default expiration:</label>
+                        <select id="defaultExpiration">
+                            <option value="60">1 minute</option>
+                            <option value="300" selected>5 minutes</option>
+                            <option value="900">15 minutes</option>
+                            <option value="3600">1 hour</option>
+                            <option value="86400">24 hours</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <h4>Notifications</h4>
+                    <label class="setting-label">
+                        <input type="checkbox" id="enableTypingIndicators" checked>
+                        <span>Show typing indicators</span>
+                    </label>
+                    <label class="setting-label">
+                        <input type="checkbox" id="enableReadReceipts" checked>
+                        <span>Send read receipts</span>
+                    </label>
+                    <label class="setting-label">
+                        <input type="checkbox" id="enableSoundNotifications" checked>
+                        <span>Play notification sounds</span>
+                    </label>
+                </div>
+
+                <div class="setting-actions">
+                    <button class="btn btn-primary" id="saveChatSettings">Save Settings</button>
+                    <button class="btn btn-secondary" id="resetChatSettings">Reset to Defaults</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden Form Data -->
+    <form id="hiddenForm" style="display: none;">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <input type="hidden" name="partnerId" value="<%= partnerUser.id %>">
+        <input type="hidden" name="partnerUsername" value="<%= partnerUser.username %>">
+    </form>
+
+    <!-- JavaScript -->
+    <script src="/static/js/crypto/polyfills.js"></script>
+    <script src="/static/js/crypto/rsa.js"></script>
+    <script src="/static/js/crypto/aes.js"></script>
+    <script src="/static/js/websocket.js"></script>
+    <script src="/static/js/encryption.js"></script>
+    <script src="/static/js/chatRoom.js"></script>
+
+    <!-- Configuration -->
+    <script>
+        window.DARKCHAT_CONFIG = {
+            currentUser: {
+                id: '<%= currentUser.id %>',
+                username: '<%= currentUser.username %>',
+                status: '<%= currentUser.status %>',
+                hasDeviceKeys: <%= currentUser.hasDeviceKeys %>
+            },
+            partner: {
+                id: '<%= partnerUser.id %>',
+                username: '<%= partnerUser.username %>',
+                status: '<%= partnerUser.status %>'
+            },
+            encryption: {
+                rsaKeySize: <%= encryptionConfig.rsaKeySize %>,
+                aesKeySize: <%= encryptionConfig.aesKeySize %>,
+                defaultTTL: <%= encryptionConfig.defaultTTL %>
+            },
+            websocket: {
+                url: '<%= websocketUrl %>',
+                reconnect: true,
+                reconnectDelay: 5000
+            },
+            security: {
+                csrfToken: '<%= csrfToken %>'
+            },
+            ui: {
+                maxMessageLength: 10000,
+                typingDelay: 1000,
+                messageTimeout: 30000
+            },
+            development: <%= isDevelopment %>
+        };
+
+        // Initialize application
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DarkChat Chat Room initializing...');
+
+            // Check if user has encryption keys
+            <% if (!currentUser.hasDeviceKeys) { %>
+                alert('You need to generate encryption keys to send messages. Redirecting to key generation...');
+                window.location.href = '/generate-keys';
+                return;
+            <% } %>
+
+            // Initialize chat application
+            if (window.DarkChat) {
+                window.DarkChat.init();
+            }
+        });
+
+        // Security measures
+        window.addEventListener('beforeunload', function() {
+            // Clean up sensitive data
+            if (window.DarkChat && window.DarkChat.cleanup) {
+                window.DarkChat.cleanup();
+            }
+        });
+
+        // Prevent screenshots in production (if possible)
+        <% if (!isDevelopment) { %>
+        document.addEventListener('keydown', function(e) {
+            // Prevent common screenshot shortcuts
+            if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S' || e.key === 'PrintScreen')) {
+                e.preventDefault();
+                return false;
+            }
+        });
+        <% } %>
+    </script>
+</body>
+</html>
